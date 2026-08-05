@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AstroGyan booking API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: slots
+    description: Availability slot operations
+  - name: appointments
+    description: Appointment booking operations
+  - name: payment
+    description: Payment verification
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +29,189 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /slots:
+    get:
+      operationId: getSlots
+      tags: [slots]
+      summary: Get available time slots for a date
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            description: Date in YYYY-MM-DD format
+      responses:
+        "200":
+          description: List of slots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlotsResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /appointments:
+    post:
+      operationId: createAppointment
+      tags: [appointments]
+      summary: Create a new appointment (booking form submission)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentInput"
+      responses:
+        "201":
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "409":
+          description: Slot already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+    get:
+      operationId: listAppointments
+      tags: [appointments]
+      summary: List all appointments (admin only — requires x-admin-code header)
+      parameters:
+        - name: x-admin-code
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of appointments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentsListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /appointments/{id}:
+    get:
+      operationId: getAppointment
+      tags: [appointments]
+      summary: Get a single appointment by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Appointment found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateAppointmentStatus
+      tags: [appointments]
+      summary: Update appointment status (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: x-admin-code
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentStatusUpdate"
+      responses:
+        "200":
+          description: Updated appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /payment/verify:
+    post:
+      operationId: verifyPayment
+      tags: [payment]
+      summary: Submit UTR/transaction ID to mark appointment as paid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentVerification"
+      responses:
+        "200":
+          description: Payment verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Appointment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +222,171 @@ components:
       required:
         - status
 
+    Slot:
+      type: object
+      properties:
+        time:
+          type: string
+        available:
+          type: boolean
+      required:
+        - time
+        - available
+
+    SlotsResponse:
+      type: object
+      properties:
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/Slot"
+      required:
+        - slots
+
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        dob:
+          type: string
+        timeOfBirth:
+          type: string
+        placeOfBirth:
+          type: string
+        gender:
+          type: string
+        consultationType:
+          type: string
+        appointmentDate:
+          type: string
+        appointmentTime:
+          type: string
+        notes:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [pending_payment, paid, completed, cancelled]
+        transactionId:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - fullName
+        - email
+        - phone
+        - dob
+        - timeOfBirth
+        - placeOfBirth
+        - gender
+        - consultationType
+        - appointmentDate
+        - appointmentTime
+        - notes
+        - amount
+        - status
+        - createdAt
+
+    AppointmentResponse:
+      type: object
+      properties:
+        appointment:
+          $ref: "#/components/schemas/Appointment"
+      required:
+        - appointment
+
+    AppointmentsListResponse:
+      type: object
+      properties:
+        appointments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Appointment"
+      required:
+        - appointments
+
+    AppointmentInput:
+      type: object
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        dob:
+          type: string
+        timeOfBirth:
+          type: string
+        placeOfBirth:
+          type: string
+        gender:
+          type: string
+        consultationType:
+          type: string
+        appointmentDate:
+          type: string
+        appointmentTime:
+          type: string
+        notes:
+          type: string
+      required:
+        - fullName
+        - email
+        - phone
+        - dob
+        - timeOfBirth
+        - placeOfBirth
+        - gender
+        - consultationType
+        - appointmentDate
+        - appointmentTime
+
+    AppointmentStatusUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending_payment, paid, completed, cancelled]
+      required:
+        - status
+
+    PaymentVerification:
+      type: object
+      properties:
+        appointmentId:
+          type: string
+        transactionId:
+          type: string
+      required:
+        - appointmentId
+        - transactionId
+
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    ValidationError:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+      required:
+        - errors
